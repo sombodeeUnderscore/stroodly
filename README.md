@@ -91,9 +91,6 @@ You'll need:
    PORT=5173            # only read by whichever process you start
    ```
 
-   On Replit these are managed for you in the Secrets pane and each
-   service gets its own `PORT` automatically.
-
 3. **Push the schema to your database** (creates the tables; safe to
    re-run):
 
