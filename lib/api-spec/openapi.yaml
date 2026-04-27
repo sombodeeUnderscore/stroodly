@@ -1,0 +1,848 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: agents
+    description: Agent management
+  - name: templates
+    description: Agent templates
+  - name: runs
+    description: Agent run management
+  - name: tools
+    description: Custom tool management
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List all agents
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+    post:
+      operationId: createAgent
+      tags: [agents]
+      summary: Create a new agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentBody"
+      responses:
+        "201":
+          description: Created agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [agents]
+      summary: Get agent by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateAgent
+      tags: [agents]
+      summary: Update an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAgentBody"
+      responses:
+        "200":
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAgent
+      tags: [agents]
+      summary: Delete an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /agents/{id}/runs:
+    get:
+      operationId: listAgentRuns
+      tags: [runs]
+      summary: List runs for an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentRun"
+
+  /agents/{id}/run:
+    post:
+      operationId: startAgentRun
+      tags: [runs]
+      summary: Start a new agent run (SSE streaming)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartRunBody"
+      responses:
+        "200":
+          description: SSE stream of agent steps
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /runs:
+    get:
+      operationId: listAllRuns
+      tags: [runs]
+      summary: List all recent runs across all agents
+      responses:
+        "200":
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentRun"
+    delete:
+      operationId: clearAllRuns
+      tags: [runs]
+      summary: Delete every run and reset agent run counters
+      responses:
+        "204":
+          description: Cleared
+
+  /runs/{runId}:
+    get:
+      operationId: getRun
+      tags: [runs]
+      summary: Get a run with its steps
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Run with steps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRunWithSteps"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /runs/{runId}/replay:
+    post:
+      operationId: replayRun
+      tags: [runs]
+      summary: Replay a past run against the agent's current configuration
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: New run created from replay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplayRunResponse"
+        "404":
+          description: Source run or agent not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /runs/{runId}/strand:
+    post:
+      operationId: createStrand
+      tags: [runs]
+      summary: Create or fetch the public Strand share link for a run
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Strand token + URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrandShareResponse"
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: revokeStrand
+      tags: [runs]
+      summary: Revoke a run's public Strand share link
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Revoked
+        "404":
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /strands/{token}:
+    get:
+      operationId: getStrand
+      tags: [runs]
+      summary: Public read-only access to a shared Strand by token
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Strand trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Strand"
+        "404":
+          description: Strand not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [templates]
+      summary: List built-in agent templates
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentTemplate"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [agents]
+      summary: Get platform stats summary
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformStats"
+
+  /tools/builtin:
+    get:
+      operationId: listBuiltinTools
+      tags: [tools]
+      summary: List all built-in tools available to agents
+      responses:
+        "200":
+          description: List of built-in tools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BuiltinTool"
+
+  /tools:
+    get:
+      operationId: listTools
+      tags: [tools]
+      summary: List all custom tools
+      responses:
+        "200":
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tool"
+    post:
+      operationId: createTool
+      tags: [tools]
+      summary: Create a new custom tool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateToolBody"
+      responses:
+        "201":
+          description: Created tool
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tool"
+
+  /tools/{id}:
+    delete:
+      operationId: deleteTool
+      tags: [tools]
+      summary: Delete a custom tool
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        systemPrompt:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [react, pipeline]
+        model:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        runCount:
+          type: integer
+      required:
+        - id
+        - slug
+        - name
+        - description
+        - systemPrompt
+        - tools
+        - mode
+        - model
+        - createdAt
+        - updatedAt
+        - runCount
+
+    CreateAgentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        systemPrompt:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [react, pipeline]
+        model:
+          type: string
+      required:
+        - name
+        - description
+        - systemPrompt
+        - tools
+
+    UpdateAgentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        systemPrompt:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [react, pipeline]
+        model:
+          type: string
+
+    AgentRun:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        agentName:
+          type: string
+        task:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed]
+        output:
+          type: string
+        stepCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        replayOfRunId:
+          type: integer
+          nullable: true
+          description: When this run was created via replay, the id of the source run.
+        shareToken:
+          type: string
+          nullable: true
+          description: When set, this run is publicly viewable as a Strand at /strand/{token}.
+      required:
+        - id
+        - agentId
+        - agentName
+        - task
+        - status
+        - stepCount
+        - createdAt
+
+    RunStep:
+      type: object
+      properties:
+        id:
+          type: integer
+        runId:
+          type: integer
+        stepIndex:
+          type: integer
+        type:
+          type: string
+          enum: [thought, tool_call, tool_result, final_answer]
+        content:
+          type: string
+        toolName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - runId
+        - stepIndex
+        - type
+        - content
+        - createdAt
+
+    AgentRunWithSteps:
+      type: object
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        agentName:
+          type: string
+        task:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed]
+        output:
+          type: string
+        stepCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        replayOfRunId:
+          type: integer
+          nullable: true
+          description: When this run was created via replay, the id of the source run.
+        shareToken:
+          type: string
+          nullable: true
+          description: When set, this run is publicly viewable as a Strand at /strand/{token}.
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/RunStep"
+      required:
+        - id
+        - agentId
+        - agentName
+        - task
+        - status
+        - stepCount
+        - createdAt
+        - steps
+
+    ReplayRunResponse:
+      type: object
+      properties:
+        runId:
+          type: integer
+        agentId:
+          type: integer
+        replayOfRunId:
+          type: integer
+        status:
+          type: string
+          enum: [completed, failed]
+        output:
+          type: string
+      required:
+        - runId
+        - agentId
+        - replayOfRunId
+        - status
+        - output
+
+    StrandShareResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        url:
+          type: string
+      required:
+        - token
+        - url
+
+    Strand:
+      type: object
+      description: Public, read-only view of a single agent run trace.
+      properties:
+        id:
+          type: integer
+        token:
+          type: string
+        agentId:
+          type: integer
+        agentName:
+          type: string
+        agentMode:
+          type: string
+          enum: [react, pipeline]
+        task:
+          type: string
+        status:
+          type: string
+          enum: [running, completed, failed]
+        output:
+          type: string
+        stepCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/RunStep"
+      required:
+        - id
+        - token
+        - agentId
+        - agentName
+        - agentMode
+        - task
+        - status
+        - stepCount
+        - createdAt
+        - steps
+
+    AgentTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        systemPrompt:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        model:
+          type: string
+        difficulty:
+          type: string
+          enum: [beginner, intermediate, advanced]
+      required:
+        - id
+        - name
+        - description
+        - category
+        - systemPrompt
+        - tools
+        - model
+        - difficulty
+
+    PlatformStats:
+      type: object
+      properties:
+        totalAgents:
+          type: integer
+        totalRuns:
+          type: integer
+        completedRuns:
+          type: integer
+        failedRuns:
+          type: integer
+        activeTools:
+          type: array
+          items:
+            type: string
+      required:
+        - totalAgents
+        - totalRuns
+        - completedRuns
+        - failedRuns
+        - activeTools
+
+    StartRunBody:
+      type: object
+      properties:
+        task:
+          type: string
+      required:
+        - task
+
+    Tool:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [webhook, prompt]
+        config:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - description
+        - type
+        - config
+        - createdAt
+        - updatedAt
+
+    CreateToolBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [webhook, prompt]
+        config:
+          type: object
+          additionalProperties: true
+      required:
+        - name
+        - description
+        - type
+        - config
+
+    BuiltinTool:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+      required:
+        - id
+        - name
+        - description
+        - category
+
+    DeleteToolParams:
+      type: object
+      properties:
+        id:
+          type: integer
+      required:
+        - id
